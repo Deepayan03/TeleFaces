@@ -10,7 +10,7 @@ const app = express();
 dotenv.config();
 
 dbConfig();
-
+app.use(express.json());
 app.use(morgan("dev"));
 app.use(cookieParser());
 app.use("/api/backend", (req, res) => {

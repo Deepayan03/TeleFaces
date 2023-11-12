@@ -14,12 +14,12 @@ import upload from "../middlewares/multerMiddleware.js";
 
 const userRouter = Router();
 // Defining user routes
-controller.post("/register",upload.single("avatar"), register);
-controller.post("/login", login);
-controller.get("/logout", logout);
-controller.get("/getProfile/", isLoggedIn, getProfile);
-controller.post("/forgotPassword", forgotPassword);
-controller.post("/resetPassword/:resetToken", resetPassword);
-controller.post("/changePassword", isLoggedIn, changePassword);
-controller.put("/update", isLoggedIn,upload.single("avatar"),  updateUser);
+userRouter.post("/register",upload.single("avatar") , register);
+userRouter.post("/login", login);
+userRouter.get("/logout", logout);
+userRouter.get("/getProfile/", isLoggedIn, getProfile);
+userRouter.post("/forgotPassword", forgotPassword);
+userRouter.post("/resetPassword/:resetToken", resetPassword);
+userRouter.post("/changePassword", isLoggedIn, changePassword);
+userRouter.put("/update", isLoggedIn,upload.single("avatar"),  updateUser);
 export default userRouter;
