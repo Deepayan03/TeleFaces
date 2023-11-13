@@ -35,6 +35,7 @@ const schema = new Schema(
       type: String,
       required: [true, "password is required"],
       trim: true,
+      select:false
     },
     avatar: avatarSchema,
     forgotPasswordToken: String,

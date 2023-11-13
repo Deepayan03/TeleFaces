@@ -17,7 +17,7 @@ const userRouter = Router();
 userRouter.post("/register",upload.single("avatar") , register);
 userRouter.post("/login", login);
 userRouter.get("/logout", logout);
-userRouter.get("/getProfile/", isLoggedIn, getProfile);
+userRouter.get("/getProfile/:userId", isLoggedIn, getProfile);
 userRouter.post("/forgotPassword", forgotPassword);
 userRouter.post("/resetPassword/:resetToken", resetPassword);
 userRouter.post("/changePassword", isLoggedIn, changePassword);
