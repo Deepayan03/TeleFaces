@@ -101,4 +101,4 @@ schema.methods = {
 // Modelling the userSchema
 const User = mongoose.model("Telefaces_Users", schema);
 // exporting the user Model
-export default User;
+export {mongoose,User};
