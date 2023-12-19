@@ -12,7 +12,7 @@ const cookieOptions = {
 
 const register = async (req, res, next) => {
   const creationSession = await mongoose.startSession();
-   creationSession.startTransaction();
+  creationSession.startTransaction();
   try {
     // Destructure user information from the request body
     const { userName, email, password, confirmPassword } = req.body;
@@ -234,8 +234,71 @@ const forgotPassword = async (req, res, next) => {
     return next(new AppError(error.message, 500));
   }
 };
-const resetPassword = async (req, res, next) => {};
-const changePassword = async (req, res, next) => {};
+const resetPassword = async (req, res, next) => {
+  const resetSession = await mongoose.startSession();
+  resetSession.startTransaction();
+  try {
+    const { resetToken } = req.params;
+    const { password } = req.body;
+    const forgotPasswordToken = await crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+    const checkToken = await User.findOne({
+      forgotPasswordToken,
+      forgotPasswordExpiry: { $gt: Date.now },
+    }).session(resetSession);
+    if (!checkToken) {
+      return next(new AppError("Invalid or Expired Token", 400));
+    }
+    checkToken.password = password;
+    checkToken.forgotPasswordExpiry = undefined;
+    checkToken.forgotPasswordToken = undefined;
+    await checkToken.save({ session: resetSession });
+    await resetSession.commitTransaction();
+    resetSession.endSession();
+    res.status(200).json({
+      message: "Password changed successfully",
+    });
+  } catch (error) {
+    console.log(error);
+    await resetSession.abortTransaction();
+    resetSession.endSession();
+    return next(new AppError(error.message, 401));
+  }
+};
+const changePassword = async (req, res, next) => {
+  const changePasswordSession = await mongoose.startTransaction();
+  try {
+    const { userId } = req.params;
+    const { newPassword, confirmPassword } = req.body;
+    if (!newPassword || !confirmPassword) {
+      return next(new AppError("All fields are mandatory", 400));
+    }
+
+    if (newPassword !== confirmPassword) {
+      return next(
+        new AppError("Password and confirm password doesn't match", 400)
+      );
+    }
+    const user = await User.findById(userId).session(changePasswordSession);
+    if (!user) {
+      return next(new AppError("User doesn't exist"));
+    }
+    user.password = newPassword;
+    await user.save({ session: changePasswordSession });
+    await changePasswordSession.commitTransaction();
+    changePasswordSession.endSession();
+    res.status(200).json({
+      message: "Password changed successfully",
+    });
+  } catch (error) {
+    console.log(error);
+    await changePasswordSession.abortTransaction();
+    changePasswordSession.endSession();
+    return next(new AppError(error.message, 401));
+  }
+};
 const updateUser = async (req, res, next) => {};
 
 export {

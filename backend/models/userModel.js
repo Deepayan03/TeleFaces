@@ -102,3 +102,4 @@ schema.methods = {
 const User = mongoose.model("Telefaces_Users", schema);
 // exporting the user Model
 export {mongoose,User};
+
