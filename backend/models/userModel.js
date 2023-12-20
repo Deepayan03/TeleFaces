@@ -35,7 +35,7 @@ const schema = new Schema(
       type: String,
       required: [true, "password is required"],
       trim: true,
-      select:false
+      select: false,
     },
     avatar: avatarSchema,
     forgotPasswordToken: String,
@@ -101,5 +101,4 @@ schema.methods = {
 // Modelling the userSchema
 const User = mongoose.model("Telefaces_Users", schema);
 // exporting the user Model
-export {mongoose,User};
-
+export { mongoose, User };

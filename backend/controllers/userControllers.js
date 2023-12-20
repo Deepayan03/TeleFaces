@@ -1,4 +1,3 @@
-// import User from "../models/userModel.js";
 import cloudinary, { v2 as cdnary } from "cloudinary";
 import AppError from "../utils/ErrorUtil.js";
 import fs from "fs";
@@ -46,10 +45,7 @@ const register = async (req, res, next) => {
     });
     // Check if user creation was successful
     if (!user) {
-      return res.status(400).json({
-        success: false,
-        message: "User registration unsuccessful!",
-      });
+      return next(new AppError("User creation unsuccessful", 400));
     }
 
     // Handle avatar upload using Cloudinary if a file is present in the request
@@ -134,7 +130,7 @@ const login = async (req, res, next) => {
 
     // If no user is found, return an error
     if (!user) {
-      return next(new AppError("Email not registered", 400));
+      return next(new AppError("Email not registered", 404));
     }
 
     // Check if the provided password matches the stored hashed password
@@ -189,7 +185,7 @@ const getProfile = async (req, res, next) => {
 
     // If no user is found, return an error
     if (!user) {
-      return next(new AppError("User doesn't exist", 400));
+      return next(new AppError("User doesn't exist", 404));
     }
 
     // Return a success response with the user information
@@ -212,7 +208,7 @@ const forgotPassword = async (req, res, next) => {
     const { email } = req.body;
     const user = await User.findOne({ email }).session(resetSession);
     if (!user) {
-      return next(new AppError("Email not found", 400));
+      return next(new AppError("Email not found", 404));
     }
 
     const resetToken = await user.generatePasswordResetToken();
@@ -224,7 +220,7 @@ const forgotPassword = async (req, res, next) => {
     await resetSession.commitTransaction();
     resetSession.endSession();
     res.status(200).json({
-      success: "true",
+      success: true,
       message: "Reset password link has been sent to your email successfully",
     });
   } catch (error) {
@@ -258,6 +254,7 @@ const resetPassword = async (req, res, next) => {
     await resetSession.commitTransaction();
     resetSession.endSession();
     res.status(200).json({
+      success: true,
       message: "Password changed successfully",
     });
   } catch (error) {
@@ -271,25 +268,34 @@ const changePassword = async (req, res, next) => {
   const changePasswordSession = await mongoose.startTransaction();
   try {
     const { userId } = req.params;
-    const { newPassword, confirmPassword } = req.body;
-    if (!newPassword || !confirmPassword) {
+    const { newPassword, confirmPassword, oldPassword } = req.body;
+    if (!newPassword || !confirmPassword || !oldPassword) {
       return next(new AppError("All fields are mandatory", 400));
     }
-
     if (newPassword !== confirmPassword) {
       return next(
         new AppError("Password and confirm password doesn't match", 400)
       );
     }
-    const user = await User.findById(userId).session(changePasswordSession);
+    if (oldPassword === newPassword) {
+      return next(new AppError("Old and New password cannot be same ", 400));
+    }
+    const user = await User.findById(userId)
+      .select("+password")
+      .session(changePasswordSession);
     if (!user) {
-      return next(new AppError("User doesn't exist"));
+      return next(new AppError("User doesn't exist", 404));
+    }
+    const isPasswordValid = await user.confirmPassword(oldPassword);
+    if (!isPasswordValid) {
+      return next(new AppError("Incorrect old password", 400));
     }
     user.password = newPassword;
     await user.save({ session: changePasswordSession });
     await changePasswordSession.commitTransaction();
     changePasswordSession.endSession();
     res.status(200).json({
+      success: true,
       message: "Password changed successfully",
     });
   } catch (error) {
@@ -299,7 +305,68 @@ const changePassword = async (req, res, next) => {
     return next(new AppError(error.message, 401));
   }
 };
-const updateUser = async (req, res, next) => {};
+const updateUser = async (req, res, next) => {
+  const { fullName, userId } = req.body;
+  const updateUserSession = await mongoose.startTransaction();
+  const user = await User.findById(userId).session(updateUserSession);
+  if (!user) {
+    return next(new AppError("Invalid user Id", 404));
+  }
+  if (fullName) {
+    user.userName = fullName;
+  }
+  if (req.file) {
+    try {
+      // Configure Cloudinary with API key, secret, and cloud name
+      cloudinary.config({
+        cloud_name: process.env.cloudinary_cloudName,
+        api_key: process.env.cloudinary_apiKey,
+        api_secret: process.env.cloudinary_secret,
+      });
+      await cloudinary.v2.uploader.destroy(user.avatar.public_id);
+      // Upload the new file to Cloudinary
+      const result = await cdnary.uploader.upload(req.file.path, {
+        folder: "Telefaces",
+        width: 250,
+        height: 250,
+        gravity: "faces",
+        crop: "fill",
+      });
+
+      // If upload is successful, update user's avatar information inside the database
+      if (result) {
+        user.avatar.public_id = result.public_id;
+        user.avatar.secure_url = result.secure_url;
+
+        // Remove the file from the local filesystem
+        fs.rm(req.file.path, (err) => {
+          if (err) {
+            console.error(err);
+          }
+        });
+      }
+      await user.save({ session: updateUserSession });
+      await updateUserSession.commitTransaction();
+      updateUserSession.endSession();
+    } catch (error) {
+      // Handle errors during Cloudinary upload
+      fs.rm(req.file.path, (err) => {
+        if (err) {
+          console.error(err);
+        }
+      });
+      updateUserSession.abortTransaction();
+      updateUserSession.endSession();
+      console.log(error);
+      return next(new AppError(error.message, 400));
+    }
+  }
+  res.status(200).json({
+    success: true,
+    message: "User updation successful",
+    data: user,
+  });
+};
 
 export {
   register,
