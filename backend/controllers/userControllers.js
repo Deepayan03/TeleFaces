@@ -202,21 +202,27 @@ const getProfile = async (req, res, next) => {
 };
 
 const forgotPassword = async (req, res, next) => {
+  // Start a mongoose session for the transaction
   const resetSession = await mongoose.startSession();
   resetSession.startTransaction();
   try {
     const { email } = req.body;
+    // Use the session for the query
     const user = await User.findOne({ email }).session(resetSession);
     if (!user) {
+      // Handle case where the user is not found with a 404 status
       return next(new AppError("Email not found", 404));
     }
 
     const resetToken = await user.generatePasswordResetToken();
+    // Save user changes within the transaction
     await user.save({ session: resetSession });
     const subject = "Reset password";
     const url = `${process.env.FRONTEND_URL}/resetPassword/${resetToken}`;
     const message = `You can reset your password by clicking <a href=${url} target="_blank">Reset your password</a> \n If the above link does not work for some reason then copy paste this link in new tab${url}.\n If you have not requested this, kindly ignore.`;
+    // Send email with the reset link
     await sendEmail(email, subject, message);
+    // Commit the transaction if successful
     await resetSession.commitTransaction();
     resetSession.endSession();
     res.status(200).json({
@@ -225,11 +231,13 @@ const forgotPassword = async (req, res, next) => {
     });
   } catch (error) {
     console.log(error);
+    // Abort the transaction and handle errors with a 500 status
     await resetSession.abortTransaction();
     resetSession.endSession();
     return next(new AppError(error.message, 500));
   }
 };
+
 const resetPassword = async (req, res, next) => {
   const resetSession = await mongoose.startSession();
   resetSession.startTransaction();
@@ -242,75 +250,89 @@ const resetPassword = async (req, res, next) => {
       .digest("hex");
     const checkToken = await User.findOne({
       forgotPasswordToken,
-      forgotPasswordExpiry: { $gt: Date.now },
+      // Check if the reset token is not expired
+      forgotPasswordExpiry: { $gt: Date.now() },
     }).session(resetSession);
     if (!checkToken) {
+      // Handle invalid or expired token with a 400 status
       return next(new AppError("Invalid or Expired Token", 400));
     }
     checkToken.password = password;
     checkToken.forgotPasswordExpiry = undefined;
     checkToken.forgotPasswordToken = undefined;
+    // Save changes within the transaction
     await checkToken.save({ session: resetSession });
     await resetSession.commitTransaction();
     resetSession.endSession();
     res.status(200).json({
-      success: true,
       message: "Password changed successfully",
     });
   } catch (error) {
     console.log(error);
+    // Abort the transaction and handle errors with a 401 status
     await resetSession.abortTransaction();
     resetSession.endSession();
     return next(new AppError(error.message, 401));
   }
 };
+
 const changePassword = async (req, res, next) => {
+  // Start a transaction session
   const changePasswordSession = await mongoose.startTransaction();
   try {
     const { userId } = req.params;
     const { newPassword, confirmPassword, oldPassword } = req.body;
     if (!newPassword || !confirmPassword || !oldPassword) {
+      // Handle missing fields with a 400 status
       return next(new AppError("All fields are mandatory", 400));
     }
     if (newPassword !== confirmPassword) {
+      // Handle password mismatch with a 400 status
       return next(
-        new AppError("Password and confirm password doesn't match", 400)
+        new AppError("Password and confirm password don't match", 400)
       );
     }
     if (oldPassword === newPassword) {
-      return next(new AppError("Old and New password cannot be same ", 400));
+      // Handle old and new password being the same with a 400 status
+      return next(new AppError("Old and New password cannot be the same", 400));
     }
     const user = await User.findById(userId)
       .select("+password")
       .session(changePasswordSession);
     if (!user) {
+      // Handle non-existent user with a 404 status
       return next(new AppError("User doesn't exist", 404));
     }
     const isPasswordValid = await user.confirmPassword(oldPassword);
     if (!isPasswordValid) {
+      // Handle incorrect old password with a 400 status
       return next(new AppError("Incorrect old password", 400));
     }
     user.password = newPassword;
+    // Save changes within the transaction
     await user.save({ session: changePasswordSession });
     await changePasswordSession.commitTransaction();
     changePasswordSession.endSession();
     res.status(200).json({
-      success: true,
       message: "Password changed successfully",
     });
   } catch (error) {
     console.log(error);
+    // Abort the transaction and handle errors with a 401 status
     await changePasswordSession.abortTransaction();
     changePasswordSession.endSession();
     return next(new AppError(error.message, 401));
   }
 };
+
 const updateUser = async (req, res, next) => {
   const { fullName, userId } = req.body;
+  // Start a transaction session
   const updateUserSession = await mongoose.startTransaction();
   const user = await User.findById(userId).session(updateUserSession);
   if (!user) {
-    return next(new AppError("Invalid user Id", 404));
+    // Handle invalid user ID with a 404 status
+    return next(new AppError("Invalid user ID", 404));
   }
   if (fullName) {
     user.userName = fullName;
@@ -323,17 +345,17 @@ const updateUser = async (req, res, next) => {
         api_key: process.env.cloudinary_apiKey,
         api_secret: process.env.cloudinary_secret,
       });
+      // Destroy the previous avatar in Cloudinary
       await cloudinary.v2.uploader.destroy(user.avatar.public_id);
       // Upload the new file to Cloudinary
-      const result = await cdnary.uploader.upload(req.file.path, {
+      const result = await cloudinary.uploader.upload(req.file.path, {
         folder: "Telefaces",
         width: 250,
         height: 250,
         gravity: "faces",
         crop: "fill",
       });
-
-      // If upload is successful, update user's avatar information inside the database
+      // If upload is successful, update user's avatar information in the database
       if (result) {
         user.avatar.public_id = result.public_id;
         user.avatar.secure_url = result.secure_url;
@@ -345,6 +367,7 @@ const updateUser = async (req, res, next) => {
           }
         });
       }
+      // Save changes within the transaction
       await user.save({ session: updateUserSession });
       await updateUserSession.commitTransaction();
       updateUserSession.endSession();
@@ -358,16 +381,15 @@ const updateUser = async (req, res, next) => {
       updateUserSession.abortTransaction();
       updateUserSession.endSession();
       console.log(error);
+      // Handle errors with a 400 status
       return next(new AppError(error.message, 400));
     }
   }
   res.status(200).json({
-    success: true,
     message: "User updation successful",
     data: user,
   });
 };
-
 export {
   register,
   login,
