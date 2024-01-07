@@ -1,0 +1,12 @@
+.nav-hover {
+    padding: 8px; 
+  }
+  
+  .nav-hover:hover {
+    background: lightblue;
+    color: rgb(70, 84, 197);
+    transition: padding 1s;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    padding: 7px; 
+  }

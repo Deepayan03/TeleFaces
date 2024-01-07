@@ -1,10 +1,12 @@
 import './App.css';
-
+import {Routes , Route} from "react-router-dom"
+import LandingPage from './Pages/LandingPage.jsx';
 function App() {
+
   return (
-    <div className="App">
-      TeleFaces
-    </div>
+    <Routes>
+      <Route path='/' element={<LandingPage/>}/>
+    </Routes>
   );
 }
 
